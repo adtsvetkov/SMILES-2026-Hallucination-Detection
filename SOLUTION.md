@@ -1,8 +1,36 @@
+# SMILES Hallucination Detection Solution Description
+
 ## Quick Start
 
-### Official-compatible version
+The solution was developed and tested with:
 
-Run:
+```text
+Python 3.11
+```
+
+### Setup
+
+Clone the repository:
+
+```bash
+git clone https://github.com/adtsvetkov/SMILES-2026-Hallucination-Detection.git
+cd SMILES-2026-Hallucination-Detection
+```
+
+Create and activate a virtual environment:
+
+```bash
+python3.11 -m venv venv
+source venv/bin/activate
+```
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+### Run the official-compatible version
 
 ```bash
 python solution.py
@@ -16,15 +44,7 @@ This version modifies only:
 
 and keeps the original competition pipeline unchanged.
 
----
-
-### Research version
-
-Run:
-
-```bash
-python solution_edited.py
-```
+### Run the research version
 
 This version additionally passes `prompt_len` into `aggregation.py`:
 
@@ -70,7 +90,7 @@ Additional details:
 | `solution.py` | 89600 | 5 | 1290.3 s |
 | `solution_edited.py` | 89600 | 5 | 1716.8 s |
 
-Link to 
+The submitted `predictions.csv` file is available [here](https://drive.google.com/drive/folders/1XSbBXhhd0T8R8gLZM5uG9gDUgASJRe9Q?usp=drive_link).
 
 ---
 
