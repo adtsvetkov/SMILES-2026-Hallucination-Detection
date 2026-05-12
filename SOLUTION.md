@@ -7,20 +7,14 @@
   - [Run the official-compatible version](#run-the-official-compatible-version)
   - [Run the research version](#run-the-research-version)
   - [Difference between versions](#difference-between-versions)
-
 - [Main Results](#main-results)
   - [Evaluation Summary](#evaluation-summary)
-
 - [Final Modeling Pipeline](#final-modeling-pipeline)
   - [Aggregation (`aggregation.py`)](#aggregation-aggregationpy)
   - [Probe (`probe.py`)](#probe-probepy)
-
-- [Changes in splitting.py](#changes-in-splittingpy)
-
+  - [Changes in splitting.py](#changes-in-splittingpy)
 - [My Solution Logic](#my-solution-logic)
-
 - [Why is the final official score much lower?](#why-is-the-final-official-score-much-lower)
-
 - [Future plans](#future-plans)
 
 ## Quick Start
@@ -191,7 +185,7 @@ Final CatBoost parameters:
 }
 ```
 
-## Changes in splitting.py
+### Changes in splitting.py
 
 The original repository used a single random train/validation/test split. :contentReference[oaicite:0]{index=0}
 
