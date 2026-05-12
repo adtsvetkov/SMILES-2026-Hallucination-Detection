@@ -1,5 +1,28 @@
 # SMILES Hallucination Detection Solution Description
 
+## Table of Contents
+
+- [Quick Start](#quick-start)
+  - [Setup](#setup)
+  - [Run the official-compatible version](#run-the-official-compatible-version)
+  - [Run the research version](#run-the-research-version)
+  - [Difference between versions](#difference-between-versions)
+
+- [Main Results](#main-results)
+  - [Evaluation Summary](#evaluation-summary)
+
+- [Final Modeling Pipeline](#final-modeling-pipeline)
+  - [Aggregation (`aggregation.py`)](#aggregation-aggregationpy)
+  - [Probe (`probe.py`)](#probe-probepy)
+
+- [Changes in splitting.py](#changes-in-splittingpy)
+
+- [My Solution Logic](#my-solution-logic)
+
+- [Why is the final official score much lower?](#why-is-the-final-official-score-much-lower)
+
+- [Future plans](#future-plans)
+
 ## Quick Start
 
 The solution was developed and tested with:
