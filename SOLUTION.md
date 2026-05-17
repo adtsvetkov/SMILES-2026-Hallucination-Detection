@@ -102,8 +102,10 @@ The following official pipeline files were modified (for track A and C):
 For Track B, alternative versions were created:
 - `aggregation_single.py`
 - `probe_single.py`
+- `solution_single.py`
 - `aggregation_meta.py`
 - `probe_meta.py`
+- `solution_meta.py`
 
 ---
 
