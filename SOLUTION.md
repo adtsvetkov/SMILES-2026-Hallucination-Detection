@@ -37,9 +37,9 @@ The solution uses:
 
 ## What do tracks mean
 
-- Track A uses only hidden-state geometry features and does not rely on prompt boundaries, attentions, or logits. It focuses on compact cross-layer dynamics, response pooling, and temporal hidden-state statistics.
-- Track B extends Track A with prompt-aware infrastructure. Prompt boundaries are reconstructed inside aggregation, allowing the model to build exact prompt/response masks and extract prompt-conditioned hidden-state features. This produces a large improvement in AUROC.
-- Track C further extends Track B by introducing attention-aware infrastructure, grounding decay features, retrieval-style attention persistence, and multi-stage ensemble learning. The final Track C solution combines multiple prompt-aware and attention-aware models through probability-level blending and achieves the best overall metric.
+- Track A is the honest setting: it keeps the original pipeline unchanged and uses only the hidden states that are already available from the official solution flow. No prompt length, attentions, logits, or extra model outputs are used.
+- Track B is a less strict setting: we add an extra dataset read inside `aggregation.py` to reconstruct `prompt_len` and build exact prompt/response masks. This gives stronger prompt-aware features, but it is not as clean as Track A because it relies on additional access to the original dataset inside aggregation.
+- Track C is the least strict setting: it uses the Track B `prompt_len` reconstruction and additionally modifies model inference to return attentions. This enables attention-grounding and prompt-response attention features, but it moves furthest away from the original official pipeline.
 
 ---
 # Repository branches
