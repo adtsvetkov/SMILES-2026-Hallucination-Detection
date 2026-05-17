@@ -1,260 +1,178 @@
 """
-Submission-oriented probe.py
+probe.py — Hallucination probe classifier (student-implemented).
 
-This file puts the notebook-best modelling idea inside the official
-HallucinationProbe interface:
-
-- CatBoost classifier
-- recursive feature elimination over the high-dimensional drift features
-- three RFE selectors: 250 -> 200 -> 125 -> 70 / 60 / 80
-- weighted probability ensemble
-
-The implementation is fold-safe: every feature selection step is performed
-inside fit() using only the X, y passed by evaluate.py for the current training
-split.
+Implements ``HallucinationProbe``, a binary MLP that classifies feature
+vectors as truthful (0) or hallucinated (1).  Called from ``solution.py``
+via ``evaluate.run_evaluation``.  All four public methods (``fit``,
+``fit_hyperparameters``, ``predict``, ``predict_proba``) must be implemented
+and their signatures must not change.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Iterable
-
 import numpy as np
+import torch
 import torch.nn as nn
-from catboost import CatBoostClassifier
 from sklearn.metrics import f1_score
-from sklearn.model_selection import StratifiedKFold, train_test_split
-
-
-RANDOM_STATE = 42
-
-CATBOOST_PARAMS = {
-    "iterations": 600,
-    "depth": 4,
-    "learning_rate": 0.0628238389168676,
-    "l2_leaf_reg": 9.703703315819581,
-    "random_strength": 6.728629794179622,
-    "bagging_temperature": 1.3001972097295067,
-    "border_count": 161,
-    "auto_class_weights": "Balanced",
-}
-
-RFE_STEPS = {
-    "rfe_70": (200, 125, 70),
-    "rfe_60": (200, 125, 60),
-    "rfe_80": (200, 125, 80),
-}
-
-ENSEMBLE_ORDER = ["rfe_70", "rfe_60", "rfe_80"]
-ENSEMBLE_WEIGHTS = np.array(
-    [
-        0.8326522912543401,
-        0.13906799872596168,
-        0.14228215132046573,
-    ],
-    dtype=np.float64,
-)
-ENSEMBLE_WEIGHTS = ENSEMBLE_WEIGHTS / ENSEMBLE_WEIGHTS.sum()
-
-START_K = 250
-INNER_SPLITS = 3
-
-
-@dataclass
-class _Member:
-    name: str
-    feature_idx: np.ndarray
-    model: CatBoostClassifier
-
-
-def _clean_X(X: np.ndarray) -> np.ndarray:
-    X = np.asarray(X, dtype=np.float32)
-    return np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
-
-
-def _make_catboost(seed: int) -> CatBoostClassifier:
-    return CatBoostClassifier(
-        **CATBOOST_PARAMS,
-        loss_function="Logloss",
-        eval_metric="AUC",
-        random_seed=seed,
-        verbose=False,
-        allow_writing_files=False,
-        thread_count=-1,
-    )
-
-
-def _fast_univariate_scores(X: np.ndarray, y: np.ndarray) -> np.ndarray:
-    """Fast supervised feature ranking.
-
-    The notebook used AUC/correlation-driven preselection before CatBoost RFE.
-    For the official runtime, absolute point-biserial correlation is a stable
-    and much faster proxy for high-dimensional initial filtering.
-    """
-    y = y.astype(np.float32)
-    y = y - y.mean()
-    Xc = X - X.mean(axis=0, keepdims=True)
-
-    numerator = np.abs(Xc.T @ y)
-    denominator = (
-        np.sqrt(np.sum(Xc * Xc, axis=0))
-        * np.sqrt(float(np.sum(y * y)))
-        + 1e-12
-    )
-    scores = numerator / denominator
-    return np.nan_to_num(scores, nan=0.0, posinf=0.0, neginf=0.0)
-
-
-def _top_k(scores: np.ndarray, k: int) -> np.ndarray:
-    k = min(int(k), scores.shape[0])
-    if k <= 0:
-        return np.arange(0, dtype=int)
-    idx = np.argpartition(scores, -k)[-k:]
-    idx = idx[np.argsort(scores[idx])[::-1]]
-    return idx.astype(int)
-
-
-def _inner_cv_indices(y: np.ndarray) -> list[tuple[np.ndarray, np.ndarray]]:
-    y = np.asarray(y).astype(int)
-    n_splits = min(INNER_SPLITS, np.bincount(y).min())
-
-    if n_splits >= 2:
-        skf = StratifiedKFold(
-            n_splits=n_splits,
-            shuffle=True,
-            random_state=RANDOM_STATE,
-        )
-        return [(tr, va) for tr, va in skf.split(np.arange(len(y)), y)]
-
-    idx = np.arange(len(y))
-    tr, va = train_test_split(
-        idx,
-        test_size=0.2,
-        random_state=RANDOM_STATE,
-        stratify=y if len(np.unique(y)) > 1 else None,
-    )
-    return [(tr, va)]
-
-
-def _rfe_select_features(
-    X: np.ndarray,
-    y: np.ndarray,
-    steps: Iterable[int],
-    seed_offset: int = 0,
-) -> np.ndarray:
-    """Recursive CatBoost feature elimination, fold-safe inside fit()."""
-    scores = _fast_univariate_scores(X, y)
-    current_idx = _top_k(scores, START_K)
-    inner_splits = _inner_cv_indices(y)
-
-    for step_i, target_k in enumerate(steps):
-        target_k = min(int(target_k), len(current_idx))
-        importance_sum = np.zeros(len(current_idx), dtype=np.float64)
-
-        for inner_i, (idx_train, idx_val) in enumerate(inner_splits):
-            model = _make_catboost(
-                seed=RANDOM_STATE + 1000 * seed_offset + 100 * step_i + inner_i
-            )
-            model.fit(
-                X[idx_train][:, current_idx],
-                y[idx_train],
-                eval_set=(X[idx_val][:, current_idx], y[idx_val]),
-                use_best_model=True,
-            )
-            imp = model.get_feature_importance().astype(np.float64)
-            imp = np.nan_to_num(imp, nan=0.0, posinf=0.0, neginf=0.0)
-            if imp.sum() > 0:
-                imp = imp / imp.sum()
-            importance_sum += imp
-
-        local_top = np.argsort(importance_sum)[-target_k:][::-1]
-        current_idx = current_idx[local_top]
-
-    return current_idx.astype(int)
+from sklearn.preprocessing import StandardScaler
 
 
 class HallucinationProbe(nn.Module):
-    """Official evaluate.py-compatible CatBoost RFE ensemble."""
+    """Binary classifier that detects hallucinations from hidden-state features.
+
+    Extends ``torch.nn.Module``; the default architecture is a single
+    hidden-layer MLP with ``StandardScaler`` pre-processing.  The network is
+    built lazily in ``fit()`` once the feature dimension is known.
+    """
 
     def __init__(self) -> None:
         super().__init__()
-        self.members_: list[_Member] = []
-        self.threshold_: float = 0.5
-        self.prior_: float = 0.5
+        self._net: nn.Sequential | None = None  # built lazily in fit()
+        self._scaler = StandardScaler()
+        self._threshold: float = 0.5  # tuned by fit_hyperparameters()
+
+    # ------------------------------------------------------------------
+    # STUDENT: Replace or extend the network definition below.
+    # ------------------------------------------------------------------
+    def _build_network(self, input_dim: int) -> None:
+        """Instantiate the network layers.
+
+        Called once at the start of ``fit()`` when ``input_dim`` is known.
+
+        Args:
+            input_dim: Feature vector dimensionality.
+        """
+        self._net = nn.Sequential(
+            nn.Linear(input_dim, 256),
+            nn.ReLU(),
+            nn.Linear(256, 1),
+        )
+
+    # ------------------------------------------------------------------
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass — returns raw logits of shape ``(n_samples,)``.
+
+        Args:
+            x: Float tensor of shape ``(n_samples, feature_dim)``.
+
+        Returns:
+            1-D tensor of raw (pre-sigmoid) logits.
+        """
+        if self._net is None:
+            raise RuntimeError(
+                "Network has not been built yet. Call fit() before forward()."
+            )
+        return self._net(x).squeeze(-1)
 
     def fit(self, X: np.ndarray, y: np.ndarray) -> "HallucinationProbe":
-        X = _clean_X(X)
-        y = np.asarray(y).astype(int)
-        self.members_ = []
-        self.prior_ = float(y.mean()) if len(y) else 0.5
+        """Train the probe on labelled feature vectors.
 
-        if len(y) < 20 or len(np.unique(y)) < 2:
-            return self
+        Scales features with ``StandardScaler``, builds the network if needed,
+        and optimises with Adam + ``BCEWithLogitsLoss``.
 
-        # Final model split used only for early stopping. Feature selection above
-        # is already internal-CV based and uses only this fit() training split.
-        idx = np.arange(len(y))
-        idx_train, idx_val = train_test_split(
-            idx,
-            test_size=0.15,
-            random_state=RANDOM_STATE,
-            stratify=y,
-        )
+        Args:
+            X: Feature matrix of shape ``(n_samples, feature_dim)``.
+            y: Integer label vector of shape ``(n_samples,)``; 0 = truthful,
+               1 = hallucinated.
 
-        for member_i, name in enumerate(ENSEMBLE_ORDER):
-            feature_idx = _rfe_select_features(
-                X=X,
-                y=y,
-                steps=RFE_STEPS[name],
-                seed_offset=member_i + 1,
-            )
+        Returns:
+            ``self`` (for method chaining).
+        """
+        X_scaled = self._scaler.fit_transform(X)
 
-            model = _make_catboost(seed=RANDOM_STATE + 100 + member_i)
-            model.fit(
-                X[idx_train][:, feature_idx],
-                y[idx_train],
-                eval_set=(X[idx_val][:, feature_idx], y[idx_val]),
-                use_best_model=True,
-            )
+        self._build_network(X_scaled.shape[1])
 
-            self.members_.append(_Member(name=name, feature_idx=feature_idx, model=model))
+        X_t = torch.from_numpy(X_scaled).float()
+        y_t = torch.from_numpy(y.astype(np.float32))
 
+        # Weight positive examples by neg/pos ratio to handle class imbalance.
+        n_pos = int(y.sum())
+        n_neg = len(y) - n_pos
+        pos_weight = torch.tensor([n_neg / max(n_pos, 1)], dtype=torch.float32)
+        criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+
+        # ------------------------------------------------------------------
+        # STUDENT: Replace or extend the training loop below.
+        # ------------------------------------------------------------------
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+
+        self.train()
+        for _ in range(200):
+            optimizer.zero_grad()
+            logits = self(X_t)
+            loss = criterion(logits, y_t)
+            loss.backward()
+            optimizer.step()
+        # ------------------------------------------------------------------
+
+        self.eval()
         return self
 
-    def fit_hyperparameters(self, X_val: np.ndarray, y_val: np.ndarray) -> "HallucinationProbe":
-        X_val = _clean_X(X_val)
-        y_val = np.asarray(y_val).astype(int)
+    def fit_hyperparameters(
+        self, X_val: np.ndarray, y_val: np.ndarray
+    ) -> "HallucinationProbe":
+        """Tune the decision threshold on a validation set to maximise F1.
+
+        The chosen threshold is stored in ``self._threshold`` and used by
+        subsequent ``predict`` calls.  Call this after ``fit`` and before
+        ``predict``.
+
+        Args:
+            X_val: Validation feature matrix of shape
+                   ``(n_val_samples, feature_dim)``.
+            y_val: Integer label vector of shape ``(n_val_samples,)``;
+                   0 = truthful, 1 = hallucinated.
+
+        Returns:
+            ``self`` (for method chaining).
+        """
         probs = self.predict_proba(X_val)[:, 1]
 
-        candidates = np.unique(
-            np.concatenate([np.linspace(0.05, 0.95, 181), probs])
-        )
+        # Candidate thresholds: unique predicted probabilities plus a coarse grid.
+        candidates = np.unique(np.concatenate([probs, np.linspace(0.0, 1.0, 101)]))
+
         best_threshold = 0.5
         best_f1 = -1.0
-
-        for threshold in candidates:
-            preds = (probs >= threshold).astype(int)
-            score = f1_score(y_val, preds, zero_division=0)
+        for t in candidates:
+            y_pred_t = (probs >= t).astype(int)
+            score = f1_score(y_val, y_pred_t, zero_division=0)
             if score > best_f1:
                 best_f1 = score
-                best_threshold = float(threshold)
+                best_threshold = float(t)
 
-        self.threshold_ = best_threshold
+        self._threshold = best_threshold
         return self
 
-    def predict_proba(self, X: np.ndarray) -> np.ndarray:
-        X = _clean_X(X)
-
-        if not self.members_:
-            p = np.full(X.shape[0], self.prior_, dtype=np.float64)
-            return np.column_stack([1.0 - p, p])
-
-        p = np.zeros(X.shape[0], dtype=np.float64)
-        for weight, member in zip(ENSEMBLE_WEIGHTS, self.members_):
-            p += float(weight) * member.model.predict_proba(X[:, member.feature_idx])[:, 1]
-
-        p = np.clip(p, 1e-6, 1.0 - 1e-6)
-        return np.column_stack([1.0 - p, p])
-
     def predict(self, X: np.ndarray) -> np.ndarray:
-        return (self.predict_proba(X)[:, 1] >= self.threshold_).astype(int)
+        """Predict binary labels for feature vectors.
+
+        Uses the decision threshold in ``self._threshold`` (default ``0.5``;
+        updated by ``fit_hyperparameters``).
+
+        Args:
+            X: Feature matrix of shape ``(n_samples, feature_dim)``.
+
+        Returns:
+            Integer array of shape ``(n_samples,)`` with values in ``{0, 1}``.
+        """
+        return (self.predict_proba(X)[:, 1] >= self._threshold).astype(int)
+
+    def predict_proba(self, X: np.ndarray) -> np.ndarray:
+        """Return class probability estimates.
+
+        Args:
+            X: Feature matrix of shape ``(n_samples, feature_dim)``.
+
+        Returns:
+            Array of shape ``(n_samples, 2)`` where column 1 contains the
+            estimated probability of the hallucinated class (label 1).
+            Used to compute AUROC.
+        """
+        X_scaled = self._scaler.transform(X)
+        X_t = torch.from_numpy(X_scaled).float()
+        with torch.no_grad():
+            logits = self(X_t)
+            prob_pos = torch.sigmoid(logits).numpy()
+        return np.stack([1.0 - prob_pos, prob_pos], axis=1)
+
