@@ -55,7 +55,7 @@ Contains:
 - early linear probes;
 - initial honest evaluation experiments.
 
-More details you can find in `solution.md` inside this branch.
+More details you can find in [`solution.md`](https://github.com/adtsvetkov/SMILES-2026-Hallucination-Detection/blob/first_iter_12th_may/solution.md) inside this branch.
 
 ---
 
@@ -71,7 +71,7 @@ Contains:
 - Track B meta model;
 - prompt reconstruction logic.
 
-More details you can find in `solution.md` inside this branch.
+More details you can find in [`solution.md`](https://github.com/adtsvetkov/SMILES-2026-Hallucination-Detection/blob/second_iter_track_B/solution.md) inside this branch.
 
 ---
 
@@ -87,7 +87,7 @@ Contains:
 - attention ensembles;
 - final Track C solution.
 
-More details you can find in `solution.md` inside this branch.
+More details you can find in [`solution.md`](https://github.com/adtsvetkov/SMILES-2026-Hallucination-Detection/blob/second_iter_track_C/solution.md) inside this branch.
 
 ---
 
@@ -294,36 +294,81 @@ Final probabilities were blended as:
 + 0.3 * seed_shap_catboost
 ```
 ---
+# My research path
 
-# Experiments and failed attempts
+All experiments are available in [`experiments_v2_honest.ipynb`](./experiments_v2_honest.ipynb).
+
+All feature generation scripts are stored separately in the [`feature generation scripts`](./feature_generating/) folder.
+
+The research process was iterative: I started from compact hidden-state geometry and gradually moved toward prompt-aware and attention-aware infrastructure while constantly validating ideas through honest stratified K-Fold evaluation.
+
+| Stage | What was implemented | Why it was tested | Result |
+|---|---|---|---|
+| 1 | Honest evaluation pipeline with stratified K-Fold | Early experiments showed unstable metrics because different random splits produced large variance on the small dataset | Final evaluation became stable and reproducible |
+| 2 | Basic hidden-state pooling | Tested simple mean pooling of hidden states from middle and late transformer layers | Produced weak baseline features |
+| 3 | Layer drift features | Added layer-to-layer drift vectors, absolute drift, squared drift, normalized drift and sign transforms | Drift features became one of the strongest signals |
+| 4 | Response-only hidden-state geometry | Built response-only pooling statistics, because hallucinations appeared more strongly in generated response regions | Improved AUROC noticeably |
+| 5 | Temporal hidden-state dynamics | Added early-vs-late response drift, last-token behavior, response-ending dynamics and trajectory statistics | Helped detect unstable generations |
+| 6 | Cross-layer update statistics | Constructed update norms between adjacent layers and compact update summaries | Produced stable gains in Track A |
+| 7 | Compact geometric statistics | Added centroid norms, cosine similarity, response-vs-prompt geometry proxies, spectral statistics and SGI-style features | Improved generalization while keeping model compact |
+| 8 | Feature transforms | Tested signed, absolute, squared, normalized and sign-only transforms of hidden-state drift | Squared and normalized transforms worked especially well |
+| 9 | Large feature spaces with PCA compression | Many feature groups were too high-dimensional for the small dataset, so PCA and aggressive feature selection were introduced | Prevented severe overfitting |
+| 10 | LogisticRegression with strong regularization | Compared linear probes against CatBoost, RandomForest, ExtraTrees, HistGradientBoosting and MLP | LogisticRegression generalized best |
+| 11 | Track A final model | Combined advanced hidden-state geometry without modifying the original pipeline | Final honest Track A score: **0.7682 Test AUROC** |
+| 12 | prompt_len reconstruction hack | Added dataset rereading inside aggregation to reconstruct exact prompt/response masks | This enabled much stronger prompt-aware features |
+| 13 | Prompt-aware hidden-state segmentation | Built separate prompt/response pooling, prompt-response centroid drift, prompt-aware temporal dynamics and response collapse statistics | Produced the largest single improvement |
+| 14 | Retrieval-style grounding proxies | Tested prompt-response similarity persistence and grounding decay over response positions | Helped distinguish hallucinated generations |
+| 15 | Prompt-conditioned response ending features | Added last-response-token instability and response-ending collapse statistics | Improved late-generation hallucination detection |
+| 16 | Track B single model | Combined prompt-aware features into a compact single-model pipeline | Reached **0.7995 Test AUROC** in notebook and **0.7993** in official pipeline |
+| 17 | Multiple prompt-aware feature spaces | Built independent prompt-aware views: advanced prompt_len features, extra smart prompt_len features and drift-focused spaces | Some views worked better together than separately |
+| 18 | Meta-logistic regression ensembles | Trained separate base models on different feature spaces and combined their probabilities with a second-stage LogisticRegression | Produced the best Track B result: **~0.805 Test AUROC** |
+| 19 | Soft blend and rank blend ensembles | Tested weighted averaging, probability rank fusion, geometric blends and confidence-based voting | Some gave small gains, but meta-logreg was more stable |
+| 20 | Threshold tuning | Tried validation-based threshold optimization for F1 | Usually improved validation F1 but often reduced test stability |
+| 21 | Attention-aware infrastructure | Modified model inference to return attentions and constructed prompt-response attention features | Enabled Track C |
+| 22 | Attention grounding decay | Added response→prompt attention decay, grounding collapse and attention persistence statistics | Became one of the strongest Track C signals |
+| 23 | Attention entropy and stability features | Tested attention entropy, head disagreement, attention concentration and temporal instability | Some features overfit heavily, only stable subsets were retained |
+| 24 | Retrieval-like attention persistence | Measured how long the model continued attending to prompt-related regions during generation | Improved hallucination detection in longer responses |
+| 25 | SHAP-selected CatBoost meta-features | Built an additional CatBoost ensemble using SHAP-selected probability/meta features | Added complementary signal to the final Track C ensemble |
+| 26 | Final Track C blend | Combined rank-fusion meta ensemble with SHAP-selected CatBoost ensemble | Final best result: **0.8137 Test AUROC** |
+
+# Experiments, failed attempts and main findings
+
+During the research process a large number of alternative architectures, feature spaces and ensemble strategies were tested. Many ideas produced strong local validation results but did not generalize well under honest stratified K-Fold evaluation.
 
 ## Heavy tree-based models
 
-Tried:
+The following models were tested extensively:
 - CatBoost;
 - RandomForest;
 - ExtraTrees;
 - HistGradientBoosting;
-- MLP.
+- MLP;
+- calibrated SVM variants.
 
-Result:
-- severe overfitting;
-- unstable fold performance;
-- worse generalization than linear models.
+Although some configurations occasionally improved train or validation metrics, most of them suffered from:
+- severe overfitting on the small dataset;
+- unstable fold-to-fold behavior;
+- large train/test gaps;
+- poor calibration compared to linear models.
+
+In practice, strongly regularized LogisticRegression generalized much more reliably.
 
 ---
 
 ## Threshold tuning
 
-Tried:
-- validation-based threshold optimization for F1.
+Validation-based threshold optimization was tested repeatedly.
 
-Result:
-- sometimes improved validation F1;
-- frequently reduced test Accuracy/F1;
-- did not affect AUROC.
+The main idea was:
+- optimize threshold on validation folds for F1;
+- then apply the selected threshold to test folds.
 
-Final solutions mostly used:
+Typical result:
+- local validation F1 improved;
+- test Accuracy/F1 often became less stable;
+- AUROC remained unchanged.
+
+Because AUROC was the primary metric and threshold tuning often reduced generalization stability, most final solutions used:
 
 ```text
 threshold = 0.5
@@ -331,41 +376,122 @@ threshold = 0.5
 
 ---
 
-## Large ensemble blending
+## Ensemble experiments
 
-Tried:
+A large number of ensemble methods were tested:
 - soft voting;
-- rank blending;
+- weighted probability blending;
 - geometric probability blending;
-- confidence-based ensembling.
+- confidence-based voting;
+- rank blending;
+- logit blending;
+- probability averaging across seeds;
+- probability-level meta learning.
 
-Result:
-- small AUROC gains;
-- unstable threshold metrics;
-- meta-logistic regression generalized more reliably.
+Observations:
+- simple weighted blends occasionally produced small AUROC improvements;
+- aggressive blending frequently destabilized threshold-based metrics;
+- probability-level meta-logistic regression generalized much more reliably than hand-designed blending heuristics.
 
----
-
-## Attention-heavy architectures
-
-Large attention feature sets were explored extensively.
-
-Result:
-- some gains on validation;
-- significantly higher extraction cost;
-- higher overfitting risk.
-
-Only the most stable attention-based components were retained in Track C.
+The best ensembles were:
+- Track B meta-logreg ensemble;
+- Track C probability-level blended ensemble.
 
 ---
 
-# Main conclusions
+## Feature-space scaling and dimensionality reduction
 
-The strongest improvements came from:
-1. honest evaluation setup;
+Very large feature spaces were explored extensively.
+
+Without dimensionality reduction:
+- train AUROC became extremely high;
+- validation/test metrics collapsed;
+- feature redundancy increased strongly.
+
+To stabilize training, the following pipeline became standard:
+
+```text
+SelectKBest
+→ PCA
+→ LogisticRegression
+```
+
+This produced much more stable generalization behavior.
+
+---
+
+## Hidden-state feature engineering
+
+Many hidden-state feature families were explored:
+- layer-to-layer drift;
+- squared drift transforms;
+- normalized drift;
+- signed drift;
+- update norms;
+- response-ending dynamics;
+- centroid geometry;
+- cosine similarity trajectories;
+- temporal response statistics;
+- compact SGI-style geometry;
+- spectral and FFT-inspired statistics.
+
+The strongest improvements consistently came from:
+- cross-layer drift features;
+- response-only hidden-state geometry;
+- late-response instability;
+- compact temporal dynamics.
+
+Some spectral and FFT-based features added complexity without meaningful gains and were discarded.
+
+---
+
+## Prompt-aware infrastructure (Track B)
+
+One of the largest improvements came from introducing prompt-aware segmentation.
+
+The official pipeline did not expose prompt boundaries directly, so prompt length reconstruction was implemented inside aggregation through rereading:
+- `data/dataset.csv`
+- `data/test.csv`
+
+This enabled:
+- exact prompt masks;
+- exact response masks;
+- prompt-response geometry;
+- prompt-conditioned response dynamics;
+- retrieval-style grounding proxies.
+
+This transition from Track A to Track B produced the largest single AUROC improvement in the project.
+
+---
+
+## Attention-aware infrastructure (Track C)
+
+Track C introduced:
+- attention extraction;
+- response→prompt attention tracking;
+- grounding persistence;
+- grounding decay;
+- attention entropy;
+- attention collapse;
+- attention head disagreement;
+- retrieval-style attention persistence.
+
+Some attention feature groups looked very strong on validation folds but failed to generalize on test folds.
+
+The final Track C solution retained only the most stable attention-aware components.
+
+---
+
+## Main conclusions
+
+The strongest improvements consistently came from:
+
+1. honest stratified K-Fold evaluation;
 2. prompt-aware segmentation;
-3. compact geometric hidden-state features;
-4. lightweight linear models with strong regularization;
-5. probability-level meta ensembling.
+3. compact hidden-state geometry;
+4. cross-layer response dynamics;
+5. lightweight regularized linear models;
+6. probability-level meta ensembling;
+7. attention-grounding persistence features.
 
-The project showed that carefully engineered hidden-state geometry can provide strong hallucination detection quality even without logits or external supervision.
+The final experiments demonstrated that carefully engineered hidden-state geometry and prompt-aware infrastructure can provide strong hallucination detection quality even without logits or external supervision.
