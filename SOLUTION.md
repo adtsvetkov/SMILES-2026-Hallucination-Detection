@@ -1,5 +1,29 @@
 # Hallucination Detection Solution
 
+# Table of contents
+
+- [Repository setup](#repository-setup)
+- [Final selected models](#final-selected-models)
+- [What do tracks mean](#what-do-tracks-mean)
+- [Repository branches](#repository-branches)
+- [Modified components](#modified-components)
+- [splitting.py modifications](#splittingpy-modifications)
+- [Final models quick explanation](#final-models-quick-explanation)
+  - [Track A](#track-a)
+  - [Track B single model](#track-b-single-model)
+  - [Track B meta model](#track-b-meta-model)
+  - [Track C](#track-c)
+- [My research path](#my-research-path)
+- [Experiments, failed attempts and main findings](#experiments-failed-attempts-and-main-findings)
+  - [Heavy tree-based models](#heavy-tree-based-models)
+  - [Threshold tuning](#threshold-tuning)
+  - [Ensemble experiments](#ensemble-experiments)
+  - [Feature-space scaling and dimensionality reduction](#feature-space-scaling-and-dimensionality-reduction)
+  - [Hidden-state feature engineering](#hidden-state-feature-engineering)
+  - [Prompt-aware infrastructure (Track B)](#prompt-aware-infrastructure-track-b)
+  - [Attention-aware infrastructure (Track C)](#attention-aware-infrastructure-track-c)
+  - [Main conclusions](#main-conclusions)
+
 ## Repository setup
 
 Current `main` branch contains the final honest Track A solution.
@@ -71,7 +95,7 @@ Contains:
 - Track B meta model;
 - prompt reconstruction logic.
 
-More details you can find in [`solution.md`](https://github.com/adtsvetkov/SMILES-2026-Hallucination-Detection/blob/second_iter_track_B/solution.md) inside this branch.
+More details about the models you can find in [`solution.md`](https://github.com/adtsvetkov/SMILES-2026-Hallucination-Detection/blob/second_iter_track_B/solution.md) inside this branch.
 
 ---
 
@@ -87,7 +111,7 @@ Contains:
 - attention ensembles;
 - final Track C solution.
 
-More details you can find in [`solution.md`](https://github.com/adtsvetkov/SMILES-2026-Hallucination-Detection/blob/second_iter_track_C/solution.md) inside this branch.
+More details about the model you can find in [`solution.md`](https://github.com/adtsvetkov/SMILES-2026-Hallucination-Detection/blob/second_iter_track_C/solution.md) inside this branch.
 
 ---
 
@@ -123,10 +147,11 @@ Key changes:
 This was critical because many early experiments showed strong overfitting when evaluation was not strictly isolated.
 
 ---
+# Final models quick explanation
 
-# Track A
+## Track A
 
-## Final approach
+### Final approach
 
 Track A uses only hidden-state-based features without:
 - prompt_len;
@@ -134,7 +159,7 @@ Track A uses only hidden-state-based features without:
 - logits;
 - hooks.
 
-### Feature extraction
+#### Feature extraction
 
 The final feature space includes:
 - exact response pooling;
@@ -151,7 +176,7 @@ Final feature count:
 21644
 ```
 
-### Architecture
+#### Architecture
 
 ```text
 SelectKBest(k=1250)
@@ -160,7 +185,7 @@ SelectKBest(k=1250)
 → threshold=0.5
 ```
 
-### Why this worked
+#### Why this worked
 
 The largest improvements came from:
 - cross-layer geometric drift features;
@@ -171,9 +196,9 @@ Simple linear models generalized better than heavy tree ensembles on the small d
 
 ---
 
-# Track B single model
+## Track B single model
 
-## Final approach
+### Final approach
 
 Track B introduces prompt-aware segmentation using reconstructed `prompt_len`.
 
@@ -186,13 +211,13 @@ This allowed building:
 - exact response masks;
 - prompt/response interaction features.
 
-### Final feature count
+#### Final feature count
 
 ```text
 24912
 ```
 
-### Architecture
+#### Architecture
 
 ```text
 SelectKBest(k=312)
@@ -201,7 +226,7 @@ SelectKBest(k=312)
 → threshold=0.5
 ```
 
-### Main improvements
+#### Main improvements
 
 Most metric gains came from:
 - prompt-aware response geometry;
@@ -213,13 +238,13 @@ This significantly improved AUROC over Track A.
 
 ---
 
-# Track B meta model
+## Track B meta model
 
-## Final approach
+### Final approach
 
 The meta-model combines several independently trained feature spaces.
 
-### Base models
+#### Base models
 
 ```text
 A__drift_squared
@@ -244,7 +269,7 @@ Their probabilities are concatenated and passed into:
 Meta LogisticRegression(C=0.1)
 ```
 
-### Why this worked
+#### Why this worked
 
 Different prompt-aware feature spaces captured complementary geometric patterns.
 
@@ -257,9 +282,9 @@ This produced the best Track B AUROC.
 
 ---
 
-# Track C
+## Track C
 
-## Final approach
+### Final approach
 
 Track C extends Track B with:
 - attention-aware infrastructure;
@@ -270,14 +295,14 @@ Track C extends Track B with:
 
 The final Track C solution used a multi-stage ensemble architecture.
 
-### Base ensemble
+#### Base ensemble
 
 The first component was a rank-fusion meta ensemble:
 - prompt-aware hidden-state views;
 - attention-aware views;
 - grounding infrastructure views.
 
-### Secondary ensemble
+#### Secondary ensemble
 
 A second ensemble component used:
 - SHAP-selected meta-features;
@@ -285,7 +310,7 @@ A second ensemble component used:
 - multiple random seeds;
 - probability aggregation.
 
-### Final blending
+#### Final blending
 
 Final probabilities were blended as:
 
