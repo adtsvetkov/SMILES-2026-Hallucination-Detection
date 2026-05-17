@@ -48,14 +48,14 @@ The solution uses:
 
 Initial hidden-state baseline experiments:
 
-```text
-first_iter_12_may
-```
+[`first_iter_12th_may`](https://github.com/adtsvetkov/SMILES-2026-Hallucination-Detection/tree/first_iter_12th_may)
 
 Contains:
 - first geometric hidden-state features;
 - early linear probes;
 - initial honest evaluation experiments.
+
+More details you can find in `solution.md` inside this branch.
 
 ---
 
@@ -63,9 +63,7 @@ Contains:
 
 Track B single + meta solutions:
 
-```text
-second_iter_track_B
-```
+[`second_iter_track_B`](https://github.com/adtsvetkov/SMILES-2026-Hallucination-Detection/tree/second_iter_track_B)
 
 Contains:
 - prompt_len-aware infrastructure;
@@ -73,21 +71,23 @@ Contains:
 - Track B meta model;
 - prompt reconstruction logic.
 
+More details you can find in `solution.md` inside this branch.
+
 ---
 
 ## Track C branch
 
 Track C attention-based experiments:
 
-```text
-second_iter_track_C
-```
+[`second_iter_track_C`](https://github.com/adtsvetkov/SMILES-2026-Hallucination-Detection/tree/second_iter_track_C)
 
 Contains:
 - attention-aware features;
 - grounding decay infrastructure;
 - attention ensembles;
 - final Track C solution.
+
+More details you can find in `solution.md` inside this branch.
 
 ---
 
