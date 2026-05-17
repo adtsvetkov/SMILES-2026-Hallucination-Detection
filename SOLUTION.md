@@ -1,6 +1,5 @@
 # SMILES Hallucination Detection Solution Description
 
-**Since application deadline was moved, I am going to improve this solution, so please check it after 17th of May.**
 ## Table of Contents
 
 - [Quick Start](#quick-start)
