@@ -53,12 +53,20 @@ The solution uses:
 
 # Final selected models
 
-| Track | Model | Train AUROC | Val AUROC | Test AUROC | Test Accuracy | Test F1 |
-|---|---|---:|---:|---:|---:|---:|
-| A | `A__advanced_all__top1250__pca256` | 0.9317 | 0.7327 | **0.7682** | 0.7678 | 0.8432 |
-| B | `B__prompt_len_features_all__top312__pca32` | 0.8464 | 0.7506 | **0.7993** | 0.7620 | 0.8394 |
-| B | `B_prompt_len_prob_meta_logreg` | ~0.9367 | ~0.7629 | **~0.8050** | ~0.7010 | ~0.8242 |
-| C | `baseline_C_rank + seed_shap_catboost blend` | not fixed | not fixed | **0.8137** | 0.7446 | 0.8075 |
+| Track | Model | Feature Dim | Train Accuracy | Train F1 | Train AUROC | Val Accuracy | Val F1 | Val AUROC | Test Accuracy | Test F1 | Test AUROC |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Baseline | Majority-class baseline | 896 | 79.20% | 87.39% | 100.00% | 72.53% | 83.41% | 66.01% | 70.83% | 82.39% | 72.08% |
+| A | `A__advanced_all__top1250__pca256` | 21644 | 86.71% | 90.96% | 93.17% | 73.49% | 82.19% | 73.27% | **76.78%** | **84.32%** | 76.82% |
+| B | `B__prompt_len_features_all__top312__pca32` | 24912 | 78.68% | 85.60% | 84.64% | 74.46% | 82.93% | 75.06% | 76.20% | 83.94% | 79.93% |
+| B | `B_prompt_len_prob_meta_logreg` | 41397 | 79.71% | 87.18% | 89.42% | **75.90%** | **85.00%** | **76.23%** | 74.74% | 84.12% | **80.37%** |
+| C (experimental) | `C_greedy_step4_4blocks_rank_fusion` | 2432 | --- | --- | --- | --- | --- | --- | 74.46% | 80.75% | 81.37%|
+
+### Best Results
+
+- **Best Test AUROC: (notebook pipeline)** `C_greedy_step4_4blocks_rank_fusion` — **81.37%**
+- **Best Test AUROC: (proved)** `B_prompt_len_prob_meta_logreg` — **80.37%**
+- **Best Test Accuracy:** `A__advanced_all__top1250__pca256` — **76.78%**
+- **Best Validation AUROC:** `B_prompt_len_prob_meta_logreg` — **76.23%**
 
 ## What do tracks mean
 
