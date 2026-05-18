@@ -134,20 +134,30 @@ if __name__=='__main__':
         # each with shape (batch, seq_len, hidden_dim).
         # Index 0 → token embeddings; index k → transformer layer k.
         with torch.no_grad():
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+            outputs = model(input_ids=input_ids, 
+                            attention_mask=attention_mask,
+                            ## adding new params
+                            output_hidden_states=True,
+                            output_attentions=True,
+                            use_cache=False,
+                            )
 
         # ── 3. Stack all layers into one tensor, move to CPU ─────────────────
         # Shape: (batch, n_layers, seq_len, hidden_dim)
         hidden = torch.stack(outputs.hidden_states, dim=1).float()
         mask   = attention_mask.cpu()
+        attentions_cpu = [att.detach().cpu().float() for att in outputs.attentions]
 
         # ── 4. Aggregate each sample and store the compact feature vector ─────
         # The raw `hidden` tensor is released at the end of this loop iteration.
         for i in range(hidden.size(0)):
+            sample_attentions = [att[i] for att in attentions_cpu]
             feat = aggregation_and_feature_extraction(
                 hidden[i],   # (n_layers, seq_len, hidden_dim)
                 mask[i],     # (seq_len,)
                 use_geometric=USE_GEOMETRIC,
+                ## add new param
+                attentions=sample_attentions,
             )
             all_features.append(feat.cpu())
 
@@ -173,8 +183,6 @@ if __name__=='__main__':
     print_summary(fold_results, X.shape[1], len(X), extract_time)
     save_results(fold_results, X.shape[1], len(X), extract_time, OUTPUT_FILE)
 
-    
-
     # ── Load test data ────────────────────────────────────────────────────────
     df_test    = pd.read_csv(TEST_FILE)
     test_texts = [f"{row['prompt']}{row['response']}" for _, row in df_test.iterrows()]
@@ -199,16 +207,29 @@ if __name__=='__main__':
         attention_mask = encoding["attention_mask"].to(device)
 
         with torch.no_grad():
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+            outputs = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                output_hidden_states=True,
+                output_attentions=True,
+                use_cache=False,
+            )
 
         hidden = torch.stack(outputs.hidden_states, dim=1).float()
-        mask   = attention_mask.cpu()
+        mask = attention_mask.cpu()
+        attentions_cpu = [att.detach().cpu().float() for att in outputs.attentions]
 
         for i in range(hidden.size(0)):
+            sample_attentions = [att[i] for att in attentions_cpu]
+
             feat = aggregation_and_feature_extraction(
-                hidden[i], mask[i], use_geometric=USE_GEOMETRIC,
+                hidden[i],
+                mask[i],
+                use_geometric=USE_GEOMETRIC,
+                attentions=sample_attentions,
             )
-            test_features.append(feat.cpu())
+
+    test_features.append(feat.cpu())
 
     X_test = np.vstack([f.numpy() for f in test_features])  # (n_test, feature_dim)
 

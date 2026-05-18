@@ -41,6 +41,9 @@ def get_model_and_tokenizer(
         model_name,
         output_hidden_states=True,
         torch_dtype=torch.bfloat16,
+        ## add new param
+        output_attentions=True,
+        attn_implementation="eager",
     )
     model.eval()
     return model, tokenizer
