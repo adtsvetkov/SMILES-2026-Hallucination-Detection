@@ -51,6 +51,104 @@ _ATTN_NS = _load_namespace(_ATTN_SOURCE, "_trackc_attention_features")
 _ADV_NS = _load_namespace(_ADV_SOURCE, "_trackc_advanced_prompt_len")
 
 
+# ---------------------------------------------------------------------
+# Numerical-safety patch
+# ---------------------------------------------------------------------
+def _as_finite_np(x, dtype=np.float64, clip=1e6):
+    if isinstance(x, torch.Tensor):
+        x = x.detach().cpu().float().numpy()
+    arr = np.asarray(x, dtype=dtype)
+    arr = np.nan_to_num(arr, nan=0.0, posinf=clip, neginf=-clip)
+    return np.clip(arr, -clip, clip)
+
+
+def _safe_covariance_stats(tokens: torch.Tensor) -> dict[str, float]:
+    arr = _as_finite_np(tokens, dtype=np.float64, clip=1e6)
+    if arr.ndim != 2 or arr.shape[0] <= 2:
+        return {
+            "trace": 0.0,
+            "top1_ratio": 0.0,
+            "top3_ratio": 0.0,
+            "top5_ratio": 0.0,
+            "effective_rank": 0.0,
+            "participation_ratio": 0.0,
+            "spectral_entropy": 0.0,
+        }
+
+    centered = arr - arr.mean(axis=0, keepdims=True)
+    centered = np.nan_to_num(centered, nan=0.0, posinf=1e6, neginf=-1e6)
+    centered = np.clip(centered, -1e6, 1e6)
+
+    try:
+        singular_values = np.linalg.svd(centered, full_matrices=False, compute_uv=False)
+    except np.linalg.LinAlgError:
+        # Deterministic fallback: use covariance eigenvalues. If that also fails,
+        # return zeros instead of crashing the whole official run.
+        try:
+            cov = centered @ centered.T
+            eig = np.linalg.eigvalsh(cov)
+            singular_values = np.sqrt(np.maximum(eig, 0.0))
+        except Exception:
+            singular_values = np.array([0.0], dtype=np.float64)
+
+    eig = np.nan_to_num(singular_values ** 2, nan=0.0, posinf=0.0, neginf=0.0)
+    eig = np.maximum(eig, 0.0)
+    total = float(eig.sum()) + 1e-8
+    if not np.isfinite(total) or total <= 1e-8:
+        return {
+            "trace": 0.0,
+            "top1_ratio": 0.0,
+            "top3_ratio": 0.0,
+            "top5_ratio": 0.0,
+            "effective_rank": 0.0,
+            "participation_ratio": 0.0,
+            "spectral_entropy": 0.0,
+        }
+
+    p = eig / total
+    ent = float(-(p * np.log(p + 1e-8)).sum())
+    return {
+        "trace": _clean_float(total),
+        "top1_ratio": _clean_float(p[:1].sum()),
+        "top3_ratio": _clean_float(p[:3].sum()),
+        "top5_ratio": _clean_float(p[:5].sum()),
+        "effective_rank": _clean_float(np.exp(ent)),
+        "participation_ratio": _clean_float((eig.sum() ** 2) / ((eig ** 2).sum() + 1e-8)),
+        "spectral_entropy": _clean_float(ent),
+    }
+
+
+def _safe_pairwise_cosine_stats(tokens: torch.Tensor) -> dict[str, float]:
+    arr = _as_finite_np(tokens, dtype=np.float64, clip=1e6)
+    if arr.ndim != 2 or arr.shape[0] <= 1:
+        return {"mean": 1.0, "std": 0.0, "min": 1.0, "p10": 1.0, "p90": 1.0}
+
+    norms = np.linalg.norm(arr, axis=1, keepdims=True)
+    arr = arr / (norms + 1e-8)
+    arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
+    sim = arr @ arr.T
+    tri = sim[np.triu_indices_from(sim, k=1)]
+    tri = np.nan_to_num(tri, nan=0.0, posinf=0.0, neginf=0.0)
+    if tri.size == 0:
+        tri = np.array([1.0], dtype=np.float64)
+    return {
+        "mean": _clean_float(tri.mean()),
+        "std": _clean_float(tri.std()),
+        "min": _clean_float(tri.min()),
+        "p10": _clean_float(np.percentile(tri, 10)),
+        "p90": _clean_float(np.percentile(tri, 90)),
+    }
+
+
+# The original notebook scripts assumed numerically clean hidden states. In the
+# official online pipeline, especially on MPS, rare samples can produce inf/nan
+# values and make SVD fail. Override the fragile helper functions in the embedded
+# namespaces without changing feature names or dimensionality.
+_EXTRA_NS["covariance_stats"] = _safe_covariance_stats
+_EXTRA_NS["pairwise_cosine_stats"] = _safe_pairwise_cosine_stats
+
+
+
 def _clean_float(value) -> float:
     try:
         value = float(value)
@@ -80,7 +178,7 @@ def aggregate(
     """Return exactly 2432 Track C selected raw features for one sample."""
     prompt_len = _fallback_prompt_len(attention_mask) if prompt_len is None else int(prompt_len)
 
-    hidden_cpu = hidden_states.detach().float().cpu()
+    hidden_cpu = torch.nan_to_num(hidden_states.detach().float().cpu(), nan=0.0, posinf=1e6, neginf=-1e6).clamp(-1e6, 1e6)
     mask_cpu = attention_mask.detach().bool().cpu()
 
     extra_features = _EXTRA_NS["extract_features_one_sample"](
