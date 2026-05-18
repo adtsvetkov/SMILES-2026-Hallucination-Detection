@@ -51,7 +51,7 @@ The solution uses:
 
 ---
 
-# Final selected models
+# Final selected models + plots
 
 | Track | Model | Feature Dim | Train Accuracy | Train F1 | Train AUROC | Val Accuracy | Val F1 | Val AUROC | Test Accuracy | Test F1 | Test AUROC |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -73,6 +73,39 @@ The solution uses:
 - Track A is the honest setting: it keeps the original pipeline unchanged and uses only the hidden states that are already available from the official solution flow. No prompt length, attentions, logits, or extra model outputs are used.
 - Track B is a less strict setting: we add an extra dataset read inside `aggregation.py` to reconstruct `prompt_len` and build exact prompt/response masks. This gives stronger prompt-aware features, but it is not as clean as Track A because it relies on additional access to the original dataset inside aggregation.
 - Track C is the least strict setting: it uses the Track B `prompt_len` reconstruction and additionally modifies model inference to return attentions. This enables attention-grounding and prompt-response attention features, but it moves furthest away from the original official pipeline.
+
+<details>
+<summary><strong>Additional Visualizations (Notebook Experiments)</strong></summary>
+
+The following visualizations were generated from notebook-based experiments used during research and model comparison.
+
+These experiments closely follow the official evaluation pipeline, but minor differences may exist due to:
+- notebook-side evaluation utilities;
+- threshold tuning;
+- pooled prediction visualization;
+- experimental Track C infrastructure.
+
+Despite these small implementation differences, the overall ranking and relative model behavior remain consistent with the official pipeline results.
+
+---
+
+### Confusion Matrices
+
+![Confusion Matrices](./plots/confusion_matrices_honest_test.png)
+
+---
+
+### ROC Curves
+
+![ROC Curves](./plots/roc_curves_honest_test.png)
+
+---
+
+### Test Metrics Comparison
+
+![Test Metrics Comparison](./plots/test_metrics_bars_honest_test.png)
+
+</details>
 
 ---
 # Repository branches
