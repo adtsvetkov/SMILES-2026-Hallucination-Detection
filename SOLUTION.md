@@ -3,7 +3,7 @@
 # Table of contents
 
 - [Repository setup](#repository-setup)
-- [Final selected models](#final-selected-models-+-plots)
+- [Final selected models](#final-selected-models--plots)
 - [What do tracks mean](#what-do-tracks-mean)
 - [Repository branches](#repository-branches)
 - [Modified components](#modified-components)
