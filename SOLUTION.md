@@ -302,30 +302,59 @@ Track C extends Track B with:
 - retrieval-style grounding features;
 - attention collapse features.
 
-The final Track C solution used a multi-stage ensemble architecture.
+The final Track C solution used a compact rank-fusion ensemble architecture.
 
-#### Base ensemble
+#### Final ensemble
 
-The first component was a rank-fusion meta ensemble:
-- prompt-aware hidden-state views;
-- attention-aware views;
-- grounding infrastructure views.
+The final ensemble combined four independently trained feature views:
 
-#### Secondary ensemble
+- `B__extra_smart_prompt_len_all__top312_pca64`
+- `C__attention_all__top866_pca64`
+- `B__advanced_prompt_len_max_mean__top1250_pca128`
+- `C__attention_sink__selected4`
 
-A second ensemble component used:
-- SHAP-selected meta-features;
-- CatBoost meta-learning;
-- multiple random seeds;
-- probability aggregation.
-
-#### Final blending
-
-Final probabilities were blended as:
+Each feature view used:
 
 ```text
-0.7 * baseline_C_rank
-+ 0.3 * seed_shap_catboost
+SelectKBest
+→ PCA
+→ LogisticRegression(C=0.003)
+```
+
+Final probabilities were combined using rank fusion:
+
+```text
+C_greedy_step4_4blocks_rank_fusion
+```
+
+Final selected feature count:
+
+```text
+2432
+```
+
+Best notebook result:
+
+```text
+Test AUROC = 81.37%
+```
+
+### Why Track C is Experimental
+
+Track C worked very well inside the research notebook environment, where attention features were extracted offline and cached into parquet feature stores.
+
+However, reproducing the same pipeline inside the original official evaluation framework is extremely slow because the solution requires:
+
+```python
+output_attentions=True
+```
+
+This forces the pipeline to materialize full transformer attention tensors for every sample.
+
+As a result, Track C runtime becomes dramatically larger than Track A and Track B.
+
+For this reason, the reported Track C quality should primarily be interpreted as a notebook-based experimental research result rather than a lightweight official pipeline benchmark.
+
 ```
 ---
 ## Extended Description of Track A
