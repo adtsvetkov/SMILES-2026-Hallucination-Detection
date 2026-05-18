@@ -168,6 +168,15 @@ Track A uses only hidden-state-based features without:
 - logits;
 - hooks.
 
+Generation files for this track:
+
+- `build_advanced_features.py`
+- `build_extra_smart_features.py`
+- `build_geometry_hidden_states.py`
+- `build_geometry_hidden_states_v2.py`
+- `build_honest_parquets.py`
+- `build_more_extra_features.py`
+
 #### Feature extraction
 
 The final feature space includes:
@@ -210,6 +219,12 @@ Simple linear models generalized better than heavy tree ensembles on the small d
 ### Final approach
 
 Track B introduces prompt-aware segmentation using reconstructed `prompt_len`.
+
+Generation files for this track:
+
+- `build_advanced_features_prompt_len.py`
+- `build_extra_smart_features_prompt_len.py`
+- `build_prompt_len_only_depending_features.py`
 
 The official pipeline does not expose prompt boundaries directly, so prompt length was reconstructed inside aggregation by rereading:
 - `data/dataset.csv`
@@ -292,6 +307,11 @@ This produced the best Track B AUROC.
 ---
 
 ## Track C
+
+Generation files for this track:
+
+- `build_advanced_features_infrastructure_change.py`
+- `build_extra_smart_features_infrastructure_change.py`
 
 ### Final approach
 
