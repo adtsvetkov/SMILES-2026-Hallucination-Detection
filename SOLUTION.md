@@ -412,7 +412,6 @@ As a result, Track C runtime becomes dramatically larger than Track A and Track 
 
 For this reason, the reported Track C quality should primarily be interpreted as a notebook-based experimental research result rather than a lightweight official pipeline benchmark.
 
-```
 ---
 ## Extended Description of Track A
 
