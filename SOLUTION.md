@@ -88,7 +88,7 @@ Contains:
 - early linear probes;
 - initial honest evaluation experiments.
 
-More details you can find in [`solution.md`](https://github.com/adtsvetkov/SMILES-2026-Hallucination-Detection/blob/first_iter_12th_may/solution.md) inside this branch.
+More details you can find in [`solution.md`](https://github.com/adtsvetkov/SMILES-2026-Hallucination-Detection/blob/first_iter_12th_may/SOLUTION.md) inside this branch.
 
 ---
 
@@ -104,7 +104,7 @@ Contains:
 - Track B meta model;
 - prompt reconstruction logic.
 
-More details about the models you can find in [`solution.md`](https://github.com/adtsvetkov/SMILES-2026-Hallucination-Detection/blob/second_iter_track_B/solution.md) inside this branch.
+More details about the models you can find in [`solution.md`](https://github.com/adtsvetkov/SMILES-2026-Hallucination-Detection/blob/second_iter_track_B/SOLUTION.md) inside this branch.
 
 ---
 
@@ -120,7 +120,7 @@ Contains:
 - attention ensembles;
 - final Track C solution.
 
-More details about the model you can find in [`solution.md`](https://github.com/adtsvetkov/SMILES-2026-Hallucination-Detection/blob/second_iter_track_C/solution.md) inside this branch.
+More details about the model you can find in [`solution.md`](https://github.com/adtsvetkov/SMILES-2026-Hallucination-Detection/blob/second_iter_track_C/SOLUTION.md) inside this branch.
 
 ---
 
