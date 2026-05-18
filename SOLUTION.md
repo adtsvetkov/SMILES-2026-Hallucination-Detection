@@ -87,6 +87,10 @@ These experiments closely follow the official evaluation pipeline, but minor dif
 
 Despite these small implementation differences, the overall ranking and relative model behavior remain consistent with the official pipeline results.
 
+### Notebook Qualities
+
+![Notebook Qualities](./plots/notebook_qualities.png)
+
 ---
 
 ### Confusion Matrices
