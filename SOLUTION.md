@@ -13,6 +13,7 @@
   - [Track B single model](#track-b-single-model)
   - [Track B meta model](#track-b-meta-model)
   - [Track C](#track-c)
+- [Extended Description of Track A](#extended-description-of-track-a)
 - [My research path](#my-research-path)
 - [Experiments, failed attempts and main findings](#experiments-failed-attempts-and-main-findings)
   - [Heavy tree-based models](#heavy-tree-based-models)
@@ -162,7 +163,7 @@ Track A uses only hidden-state-based features without:
 #### Feature extraction
 
 The final feature space includes:
-- exact response pooling;
+- heuristic response proxy;
 - compact cross-layer geometry;
 - SGI-style geometric statistics;
 - temporal hidden-state dynamics;
@@ -319,6 +320,195 @@ Final probabilities were blended as:
 + 0.3 * seed_shap_catboost
 ```
 ---
+## Extended Description of Track A
+
+**!! Attention! Extended descriptions of tracks B and C are available in their branches.**
+
+Track A represents the strictest and most “clean” version of the solution because it keeps the official pipeline almost unchanged and relies only on hidden states extracted from the LLM. No additional model outputs or external signals are used: there is no `prompt_len`, no attention maps, no logits, no hooks, and no auxiliary verifier models.
+
+The core idea of Track A is to extract as much information as possible directly from the geometry and dynamics of hidden states. Since the exact prompt/response boundary is unavailable, the solution uses heuristic sequence regions as response proxies: `last30`, `last20`, `last10`, `last5`, `last_token`, as well as variants without EOS such as `last30_wo_last` and `last20_wo_last`. Early sequence regions such as `first70` are used as lightweight context approximations.
+
+The final feature extractor implemented in `aggregation.py` produces a feature space of size **21644**. The features are divided into several major groups.
+
+### 1. Length and fallback features
+
+The extractor first adds compact structural metadata:
+
+- valid token count;
+- proxy response-zone lengths;
+- truncation indicators;
+- fallback flags for short responses.
+
+These features help stabilize downstream statistics for highly variable sequence lengths.
+
+### 2. Heuristic response pooling
+
+The model computes mean and max pooled representations over heuristic late-response regions:
+
+- `last30`
+- `last20`
+- `last30_wo_last`
+- `last20_wo_last`
+
+The strongest signal came from late transformer layers, especially layers 12–16. Additional dedicated pooling is performed for layer 16 using:
+
+- mean pooling;
+- max pooling;
+- last-token representations.
+
+This produces compact semantic summaries of the response region.
+
+### 3. Weighted top-3 last-token features
+
+Several weighted combinations of last-token vectors are constructed using different layer groups:
+
+- late layers;
+- middle-late layers;
+- competitor-inspired layer selections.
+
+For each weighted vector, additional aggregated statistics are computed:
+
+- L2 norm;
+- mean;
+- standard deviation;
+- absolute mean.
+
+These features provide a compact representation of response confidence and layer agreement.
+
+### 4. Compact cross-layer geometry
+
+For layers 10–19, the solution analyzes how hidden-state geometry changes across neighboring layers.
+
+Computed statistics include:
+
+- cosine similarity between layers;
+- L2 distances;
+- drift norms;
+- mean cosine drift;
+- mean L2 drift.
+
+These features measure the stability of semantic representations as the response propagates through the transformer depth.
+
+### 5. SGI-style proxy geometry
+
+Because true prompt/response separation is unavailable in Track A, SGI-like features are implemented through heuristic regions:
+
+- `first70` acts as a context proxy;
+- late response regions act as response proxies.
+
+For layers 10–19, the extractor computes geometric relations between context and response representations:
+
+- cosine similarity;
+- angular relations;
+- embedding-reference alignment.
+
+These features approximate semantic grounding consistency without explicit `prompt_len`.
+
+### 6. Cross-layer update norms
+
+For regions such as:
+
+- `last30_wo_last`
+- `last20_wo_last`
+- `last5`
+- `last_token`
+
+the extractor computes update vectors between consecutive layers.
+
+Additional statistics include:
+
+- mean update norm;
+- standard deviation;
+- max/min update norm;
+- coefficient of variation;
+- anisotropy;
+- cosine consistency across updates.
+
+This block captures how aggressively or inconsistently the model updates internal representations during generation.
+
+### 7. Temporal hidden-state dynamics
+
+The solution also models token-level dynamics inside late response regions.
+
+Features include:
+
+- velocity;
+- acceleration;
+- curvature;
+- path length;
+- endpoint distance;
+- path efficiency;
+- roughness;
+- late velocity spike ratio.
+
+These features approximate trajectory stability of hidden states over token positions and help detect unstable or self-contradictory generations.
+
+### 8. Compact spectral statistics
+
+For selected layers and regions, compact spectral features are extracted from token matrices:
+
+- participation ratio;
+- top1/top3 spectral ratio;
+- spectral entropy;
+- effective rank;
+- condition proxy.
+
+This provides a lightweight approximation of hidden-state dimensionality and concentration structure.
+
+### 9. Centroid similarity proxy features
+
+For layers:
+
+- 1
+- 6
+- 12
+- 18
+- 23
+
+the extractor compares centroids of `first70` and `last30_wo_last`.
+
+Computed features include:
+
+- cosine similarity;
+- L2 distance;
+- angle;
+- norm ratio;
+- centroid drift.
+
+These features approximate semantic drift between context and generated response without requiring explicit prompt segmentation.
+
+## Final Architecture
+
+The final classifier implemented in `probe.py` uses a simple linear pipeline:
+
+```text
+SimpleImputer(strategy="median")
+→ SelectKBest(f_classif, k=1250)
+→ StandardScaler
+→ PCA(n_components=256)
+→ LogisticRegression(
+      C=0.003,
+      penalty="l2",
+      solver="lbfgs"
+  )
+→ threshold=0.5
+```
+
+Threshold tuning is effectively disabled in Track A: the final threshold remains fixed at `0.5`. The optimization target is therefore primarily AUROC rather than accuracy.
+
+## Why This Worked
+
+The largest improvements came from:
+
+- cross-layer geometric drift features;
+- update-norm dynamics;
+- late-layer response trajectory statistics;
+- compact hidden-state geometry.
+
+The solution showed that carefully engineered hidden-state features can provide strong hallucination signals even without prompt-aware infrastructure, attentions, logits, or external verification systems.
+
+Simple linear models generalized significantly better than large tree ensembles on the small dataset and produced more stable cross-validation performance.
+
 # My research path
 
 All experiments are available in [`experiments_v2_honest.ipynb`](./experiments_v2_honest.ipynb).
